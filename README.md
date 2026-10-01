@@ -4,12 +4,12 @@
 tool that produced it.**
 
 Most tools in this space publish an accuracy number and not a false-positive
-rate. That is not an oversight. A detector vendor cannot publish the rate at
-which it falsely accuses people without damaging the product, so the most
-important number in the field is the one nobody with distribution will state.
+rate. An accuracy figure on its own does not answer the question that decides
+whether a tool can be pointed at a person: how often does it flag human writing,
+and whose?
 
-This repo states it, measures it on a public corpus, and ships the cases where
-the methods fail.
+This repo measures that on a public corpus, publishes every document score, and
+ships the cases where the methods fail.
 
 ## Headline result
 
@@ -24,12 +24,14 @@ Qwen3-0.6B:
 | Binoculars | 0.883 | 32.1% | 57.0% | 47.5% |
 | burstiness | 0.721 | 0.5% | 11.3% | 87.5% |
 
-**On raw, unedited ChatGPT output written in native English, perplexity-based
-detection genuinely works: 95% of machine text caught while wrongly flagging 1
-human in 100.**
+**On raw, unedited ChatGPT answers, perplexity-based detection works well here:
+95% of machine text caught while wrongly flagging 1 human in 100.**
 
 That is also the easy case, and it is not the case anyone is actually worried
 about. See [what this does not show](#what-this-does-not-show).
+
+**Full write-up, including the per-domain breakdown and the evaluation bug I
+found in my own first run: [FINDINGS.md](FINDINGS.md).**
 
 ## The number that matters is TPR at 1% FPR
 
@@ -53,15 +55,17 @@ there but actively inverted — human answers were *less* bursty than ChatGPT's.
 is the stronger method in the literature and the one designed to be fair. With a
 Qwen3-0.6B base/instruct pair it reaches 0.883 AUROC against perplexity's 0.997.
 The cause is visible in the intermediate values: cross-perplexity tracks
-perplexity almost exactly, because the two models are too closely matched to
-disagree usefully. The paper used 7B models. This is a limitation of the cheap
-pairing, not of the method.
+perplexity closely, which helps explain the weaker separation. It does not
+establish that model size or similarity caused it. The paper used Falcon-7B
+models; this measures one small Qwen pairing, not Binoculars in general.
 
 **3. Published thresholds do not transfer.** Binoculars' paper gives 0.9015 and
 0.8536 for a Falcon-7B pair. Scores here land at a different operating point
 entirely; applying those constants would misclassify a deliberately
 machine-written control as human. Any threshold must be recalibrated per model
 pair.
+
+The full argument, with the per-domain tables, is in [FINDINGS.md](FINDINGS.md).
 
 Two smaller ones, from earlier testing:
 
@@ -78,7 +82,14 @@ This is the part other tools leave out.
 
 **HC3 is the easy case on every axis that matters.** It is raw, unedited model
 output, from a 2022-era generator, answering questions, written by native
-English speakers. Every number above is a **best case**, not field performance.
+speakers whose first language is unknown. I treat these as **best-case
+evidence**, not field performance, and not a mathematical upper bound on every
+dataset.
+
+**Thresholds were selected on the same sample they were evaluated on.** There is
+no held-out split, and at a 1% false-positive rate the threshold rests on about
+two of the 221 human documents. These are descriptive benchmark results, not an
+independently validated operating threshold.
 
 Specifically, these results say nothing about:
 
