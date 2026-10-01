@@ -1,0 +1,10 @@
+# private: local agent context, personal baselines, real-document fixtures
+CLAUDE.md
+samples/private/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.docx
+*.pdf
+.commitmsg
