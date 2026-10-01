@@ -22,9 +22,9 @@ usage: voiceprint {detect|ppl|bino|both} FILE [FILE ...]
 
 reads .docx .md .txt .pdf
 
-Reference points, Qwen3-0.6B, measured 2026-10-01 (see CLAUDE.md):
+Reference points from the shipped controls (Qwen3-0.6B):
   LLM-register control   ppl  7.5   burst 0.54   top-10 87.8%   bino 0.9751
-  Andre's own prose      ppl 64.7   burst 1.51   top-10 61.9%   bino 1.0674
+  human control          ppl 63.0   burst 0.54   top-10 60.9%   bino 1.0205
 EOF
 }
 
