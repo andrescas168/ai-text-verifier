@@ -21,7 +21,7 @@ Qwen3-0.6B:
 |---|---|---|---|---|
 | **top-10 share** | 0.998 | **95.0%** | 98.6% | 0.9% |
 | **perplexity** | 0.997 | **92.8%** | 99.5% | 1.4% |
-| Binoculars | 0.883 | 32.1% | 57.0% | 47.5% |
+| Binoculars (Qwen3-0.6B pair) | 0.883 | 32.1% | 57.0% | 47.5% |
 | burstiness | 0.721 | 0.5% | 11.3% | 87.5% |
 
 **On raw, unedited ChatGPT answers, perplexity-based detection works well here:
@@ -30,8 +30,9 @@ Qwen3-0.6B:
 That is also the easy case, and it is not the case anyone is actually worried
 about. See [what this does not show](#what-this-does-not-show).
 
-**Full write-up, including the per-domain breakdown and the evaluation bug I
-found in my own first run: [FINDINGS.md](FINDINGS.md).**
+**Full write-up, including the per-domain breakdown, the evaluation bug I found
+in my own first run, and the two claims I withdrew after the method's author
+replied: [FINDINGS.md](FINDINGS.md).**
 
 ## The number that matters is TPR at 1% FPR
 
@@ -51,19 +52,25 @@ overall, and **97% of human documents fall inside the machine range**. In the
 `open_qa` domain it scores AUROC **0.127**, meaning it is not merely useless
 there but actively inverted — human answers were *less* bursty than ChatGPT's.
 
-**2. Binoculars underperforms raw perplexity here.** [Binoculars](https://arxiv.org/abs/2401.12070)
-is the stronger method in the literature and the one designed to be fair. With a
-Qwen3-0.6B base/instruct pair it reaches 0.883 AUROC against perplexity's 0.997.
-The cause is visible in the intermediate values: cross-perplexity tracks
-perplexity closely, which helps explain the weaker separation. It does not
-establish that model size or similarity caused it. The paper used Falcon-7B
-models; this measures one small Qwen pairing, not Binoculars in general.
+**2. Binoculars underperforms raw perplexity here, with either pair I tried.**
+[Binoculars](https://arxiv.org/abs/2401.12070) is the stronger method in the
+literature and the one designed to be fair. With a Qwen3-0.6B base/instruct pair
+it reaches 0.883 AUROC against perplexity's 0.997. After the paper's lead author
+suggested a different pair, Qwen2.5-0.5B and its instruct sibling, run inside
+their implementation rather than mine, it improves to 0.949 AUROC and 57.9% at
+the 1% budget. Perplexity under that same performer still reaches 0.996 and
+85.5%. The pair mattered and my code did not: my version lands within 0.006
+AUROC of theirs on the same models. This measures two small pairs on an easy
+corpus, not Binoculars in general.
 
-**3. Published thresholds do not transfer.** Binoculars' paper gives 0.9015 and
-0.8536 for a Falcon-7B pair. Scores here land at a different operating point
-entirely; applying those constants would misclassify a deliberately
-machine-written control as human. Any threshold must be recalibrated per model
-pair.
+**3. Published thresholds need refitting, which is a weaker claim than the one I
+first made.** Binoculars' paper gives 0.9015 and 0.8536 for a Falcon-7B pair.
+Applied unchanged to a Qwen2.5-0.5B pair on HC3, 0.9015 still catches 79.2% of
+machine text at a 4.1% false-positive rate, so the constants are not useless off
+their own pair. What does not survive the move is the calibration: 0.8536 was
+selected for a 0.01% false-positive rate on Falcon and produces 0.9% here, and a
+deliberately machine-written control of mine scores 0.9751 and is called human.
+Fit the threshold on the pair you are running.
 
 The full argument, with the per-domain tables, is in [FINDINGS.md](FINDINGS.md).
 
@@ -147,6 +154,19 @@ python3 analyze.py hc3_scores.csv
 Roughly 3 seconds per document on an 8-core CPU, no GPU required. Per-document
 scores are written as it runs, so the raw data stays inspectable and the run is
 resumable.
+
+The second model pair, and the four Binoculars configurations behind finding 2,
+run on a cloud GPU and take about eight minutes. `modal_bench.py` samples the
+same documents from the same seed, so the two score files line up row for row:
+
+```bash
+pip install modal && modal setup
+modal run modal_bench.py          # writes hc3_scores_qwen25.csv
+python3 analyze.py hc3_scores_qwen25.csv
+```
+
+Both score files are in the repo, so either table can be recomputed without
+loading a model.
 
 ## Contributing
 

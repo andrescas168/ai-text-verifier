@@ -6,13 +6,13 @@ If a teacher uses the result to accuse a student, that error matters. A detector
 
 I ran a benchmark of four detection methods and published every document score. Two methods performed well. One barely caught anything when I limited false positives. The more sophisticated method underperformed my simplest baseline.
 
-I also found a bug in my own evaluation.
+I also found a bug in my own evaluation. Then I posted the result to the method's own repository, its lead author pointed me at a better model pair, and I had to withdraw two claims.
 
 ## What I measured
 
 I used [HC3, the Human/ChatGPT Comparison Corpus](https://arxiv.org/abs/2301.07597), introduced by Guo et al. in 2023. My sample contained 221 human answers and 221 ChatGPT answers, stratified across finance, medicine, open question answering, Reddit ELI5 and computer science topics. I filtered both answers in each pair to 80 to 600 words.
 
-Qwen3-0.6B scored the text in float32 on an eight-core CPU. The run took about 21 minutes, roughly 2.9 seconds per document.
+Qwen3-0.6B scored the text in float32 on an eight-core CPU. The run took about 21 minutes, roughly 2.9 seconds per document. A later run, described below, scored the same documents with a second model pair on a GPU.
 
 I measured perplexity, how predictable the text is to the model; top-10 share, the fraction of actual next tokens among its ten highest-ranked predictions; burstiness, variation in sentence length; and Binoculars, a score that compares two related models.
 
@@ -28,7 +28,7 @@ How much machine text can I catch before the threshold starts flagging human ans
 |---|---|---|---|---|
 | Top-10 share | 0.998 | 95.0% | 98.6% | 0.9% |
 | Perplexity | 0.997 | 92.8% | 99.5% | 1.4% |
-| Binoculars | 0.883 | 32.1% | 57.0% | 47.5% |
+| Binoculars (Qwen3-0.6B pair) | 0.883 | 32.1% | 57.0% | 47.5% |
 | Burstiness | 0.721 | 0.5% | 11.3% | 87.5% |
 
 AUROC summarizes how well a score ranks human and machine text across thresholds. It does not tell me how much detection survives a low false-positive budget.
@@ -65,17 +65,51 @@ But HC3 is an easy case: raw, unedited output from a 2022-era generator, answeri
 
 I treat these as best-case evidence, not field performance. They are not a mathematical upper bound on every possible dataset, either.
 
-## My small Binoculars pair did worse
+## The Binoculars pair I picked was part of the problem
 
 [Binoculars](https://arxiv.org/abs/2401.12070) normalizes log-perplexity by a cross-entropy term computed from two models' predictions. The paper also evaluates false positives on non-native English writing. I wanted to see how the approach behaved with a cheap model pair.
 
 I used Qwen3-0.6B-Base as the observer and Qwen3-0.6B as the performer. It reached 0.883 AUROC and caught 32.1% of machine text at the 1% FPR budget. Perplexity alone did better.
 
-Earlier control runs show how the ratio can compress. The AI control's numerator was 2.0132 and its denominator was 2.0645. A separate private human control produced 4.4668 and 4.1848. The denominator moved with the numerator, bringing both ratios close to one.
+I posted that to the Binoculars repository. The paper's lead author replied that Qwen3 is a hybrid reasoning model with a template switch, asked whether I had run it with thinking on or off, and suggested `Qwen2.5-0.5B` and `Qwen2.5-0.5B-Instruct` as direct replacements for the Falcon pair, run inside their implementation rather than mine.
 
-That helps explain the weaker separation. It does not establish that model size or similarity caused it. The published setup used Falcon-7B models; my experiment evaluates this small Qwen pairing, not Binoculars in general.
+On the question: neither. I never apply a chat template. The text is tokenized raw and scored as a plain continuation by both models, which is the path their Falcon code takes, so no reasoning tokens enter the sequence in either state.
 
-The [reference implementation's thresholds](https://github.com/ahans30/Binoculars/blob/main/binoculars/detector.py), 0.9015 and 0.8536, were selected using the Falcon pair. My shipped AI control scored 0.9751, so either threshold would label it human. A published constant is not a calibration for a different model pair.
+I ran the swap on the same 442 documents, in their `detector.py` instead of mine:
+
+| configuration | AUROC | TPR at 1% FPR |
+|---|---|---|
+| their implementation, Qwen2.5-0.5B pair | 0.949 | 57.9% |
+| my implementation, Qwen2.5-0.5B pair | 0.943 | 54.3% |
+| their implementation, Qwen3-0.6B pair | 0.907 | 42.5% |
+| my implementation, Qwen3-0.6B pair, the first run | 0.883 | 32.1% |
+| perplexity alone, Qwen2.5-0.5B-Instruct | 0.996 | 85.5% |
+| top-10 share, Qwen2.5-0.5B-Instruct | 0.997 | 94.6% |
+
+He was right about the pair. His suggestion lifts Binoculars from 0.883 to 0.949 AUROC, and from 32.1% to 57.9% at the 1% budget. Separating the two changes I made at once: moving from my code to theirs on the same Qwen3 pair accounts for 0.024 of that, which I read as their 512-token truncation against my sliding window, and the pair swap accounts for a further 0.041. Running in bfloat16 rather than float32 moved nothing. My implementation lands within 0.006 AUROC of theirs on the same models, so the code I wrote was not the explanation.
+
+The comparison with perplexity did not change. Under the same Qwen2.5-0.5B-Instruct performer, perplexity reaches 0.996 AUROC and 85.5% at the 1% budget. A better pair narrowed the gap and did not close it. On this corpus, the same forward passes spent on plain perplexity catch more machine text at the same false-positive budget.
+
+I would not read that as a verdict on the method. HC3 is the case raw perplexity should handle well. It does not test the non-native-writer false positives the paper evaluates, which is the reason to prefer a normalized score in the first place.
+
+One practical note for anyone else swapping models in: the reference `requirements.txt` pins transformers 4.31.0, which predates Qwen2 entirely, so the suggested pair needs a dependency bump before `detector.py` will load it. I ran their `binoculars` package unmodified on a current 4.x.
+
+## Two claims I withdrew
+
+The first run left me with an explanation I can no longer support. I wrote that cross-perplexity moving with log-perplexity accounted for the weak separation. It moves just as closely in the pair that works: the correlation between numerator and denominator is 0.973 for the Qwen2.5 pair and 0.977 for the Qwen3 pair.
+
+The difference sits in the machine text. On machine answers the Qwen2.5 pair gives a median log-perplexity of 1.39 against a cross-perplexity of 1.68, where Qwen3 gives 1.63 against 1.87. Human medians are near 1.00 for both pairs. The better pair separates by pushing machine text down, not by decoupling the two terms. My control files showed a real thing and I drew the wrong mechanism from it.
+
+My threshold claim was also too strong. I wrote that the [reference implementation's constants](https://github.com/ahans30/Binoculars/blob/main/binoculars/detector.py), 0.9015 and 0.8536, would label everything human. That came from four control documents. On the 442-document sample they fire:
+
+| scores | threshold | TPR | FPR |
+|---|---|---|---|
+| Qwen2.5 pair, their implementation | 0.9015 | 79.2% | 4.1% |
+| Qwen2.5 pair, their implementation | 0.8536 | 53.8% | 0.9% |
+| Qwen3 pair, my implementation | 0.9015 | 54.3% | 3.2% |
+| Qwen3 pair, my implementation | 0.8536 | 27.1% | 0.9% |
+
+The narrower statement is the one I should have made. 0.8536 was selected for a 0.01% false-positive rate on the Falcon pair and produces 0.9% here, about ninety times its design point, and my own AI control scores 0.9751 and is called human. That is a calibration gap rather than a failure, and it is still a reason to fit the threshold on the pair you are running.
 
 ## The most important question remains untested
 
@@ -120,6 +154,16 @@ python3 -m venv ~/venvs/voiceprint
 ~/venvs/voiceprint/bin/pip install -r requirements.txt huggingface_hub
 ~/venvs/voiceprint/bin/python benchmark.py --n 250 --out hc3_scores_reproduced.csv
 python3 analyze.py hc3_scores_reproduced.csv
+```
+
+The second model pair, and the four Binoculars configurations in the table
+above, run from `modal_bench.py` on a cloud GPU in about eight minutes. It
+samples from the same seed, so the two score files line up row for row:
+
+```bash
+pip install modal && modal setup
+modal run modal_bench.py
+python3 analyze.py hc3_scores_qwen25.csv
 ```
 
 Scoring runs on CPU. Initial setup downloads the public models and corpus; no API keys or document uploads are required. For sentence rankings in your own draft:
