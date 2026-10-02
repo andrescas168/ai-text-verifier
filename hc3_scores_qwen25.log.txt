@@ -1,0 +1,69 @@
+sampled 442 documents (221 human / 221 machine)
+gpu: NVIDIA L4
+
+=== official impl: Qwen/Qwen2.5-0.5B / Qwen/Qwen2.5-0.5B-Instruct  bfloat16 ===
+  compute_score 0.980488 vs open-coded 0.980488  (delta 0.00e+00)
+  loaded dtype: torch.bfloat16
+  100/442  40s
+  200/442  60s
+  300/442  82s
+  400/442  104s
+  done in 113s
+
+=== official impl: Qwen/Qwen2.5-0.5B / Qwen/Qwen2.5-0.5B-Instruct  float32 ===
+  compute_score 0.975147 vs open-coded 0.975147  (delta 0.00e+00)
+  loaded dtype: torch.float32
+  100/442  32s
+  200/442  59s
+  300/442  86s
+  400/442  112s
+  done in 124s
+
+=== official impl: Qwen/Qwen3-0.6B-Base / Qwen/Qwen3-0.6B  float32 ===
+  compute_score 0.989741 vs open-coded 0.989741  (delta 0.00e+00)
+  loaded dtype: torch.float32
+  100/442  53s
+  200/442  83s
+  300/442  113s
+  400/442  142s
+  done in 154s
+
+=== our impl (full document, sliding 512, fp32): Qwen2.5 pair ===
+  dtypes: observer torch.float32 performer torch.float32
+  100/442  15s
+  200/442  25s
+  300/442  36s
+  400/442  45s
+  done in 49s
+
+=== perplexity / top-10 share: Qwen2.5-0.5B-Instruct, fp32 ===
+  100/442  7s
+  200/442  13s
+  300/442  21s
+  400/442  27s
+  done in 30s
+
+========================================================================
+HC3  442 docs  .  higher = more machine-like
+========================================================================
+score                                AUROC   TPR@1%FPR   TPR@5%FPR
+------------------------------------------------------------------------
+Binoculars Qwen2.5 bf16 (theirs)     0.949       57.9%       83.7%
+Binoculars Qwen2.5 fp32 (theirs)     0.948       56.1%       83.7%
+Binoculars Qwen2.5 fp32 (ours)       0.943       54.3%       82.4%
+Binoculars Qwen3 fp32 (theirs)       0.907       42.5%       64.7%
+perplexity Qwen2.5-Instruct          0.996       85.5%      100.0%
+top-10 share Qwen2.5-Instruct        0.997       94.6%      100.0%
+burstiness                           0.721        0.5%       11.3%
+
+median numerator / denominator by class (official impl, Qwen2.5 bf16)
+  human    bino_logppl  2.9375
+  human    bino_xppl    2.9062
+  machine  bino_logppl  1.3906
+  machine  bino_xppl    1.6797
+
+shipped Falcon thresholds applied unchanged
+  bino           accuracy  0.9015 -> TPR 79.2%  FPR 4.1%
+  bino           low-fpr   0.8536 -> TPR 53.8%  FPR 0.9%
+  bino_q3_fp32   accuracy  0.9015 -> TPR 61.5%  FPR 5.0%
+  bino_q3_fp32   low-fpr   0.8536 -> TPR 33.0%  FPR 0.9%

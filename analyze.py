@@ -55,10 +55,18 @@ def fpr_at_tpr(scores, labels, target_tpr):
     return sum(1 for s in neg if s > thr) / len(neg)
 
 
-METRICS = [('perplexity', 'ppl', -1),
-           ('top-10 share', 'top10', +1),
-           ('burstiness', 'burstiness', -1),
-           ('Binoculars', 'bino', -1)]
+# (display name, CSV column, sign that makes higher = more machine-like).
+# Only the columns a given CSV actually contains are reported, so the same
+# analyzer serves hc3_scores.csv and the later model-pair runs.
+REGISTRY = [('perplexity', 'ppl', -1),
+            ('top-10 share', 'top10', +1),
+            ('burstiness', 'burstiness', -1),
+            ('Binoculars', 'bino', -1),
+            ('Bino theirs fp32', 'bino_ref_fp32', -1),
+            ('Bino ours fp32', 'bino_ours_fp32', -1),
+            ('Bino Qwen3 pair', 'bino_q3_fp32', -1)]
+
+METRICS = REGISTRY[:4]          # default, replaced in __main__ per file
 
 
 def load(path):
@@ -69,7 +77,7 @@ def load(path):
     return rows
 
 
-def table(rows, title):
+def table(rows, title, metrics=None):
     print('\n' + '=' * 76)
     nh = sum(1 for r in rows if r['label'] == '0')
     nm = len(rows) - nh
@@ -78,7 +86,7 @@ def table(rows, title):
     print('%-16s %7s %11s %11s %12s %12s'
           % ('metric', 'AUROC', 'TPR@1%FPR', 'TPR@5%FPR', 'FPR@80%TPR', 'FPR@95%TPR'))
     print('-' * 76)
-    for name, col, sign in METRICS:
+    for name, col, sign in (metrics or METRICS):
         sc, lb = [], []
         for r in rows:
             v = r.get(col, '')
@@ -103,14 +111,16 @@ def table(rows, title):
 if __name__ == '__main__':
     path = sys.argv[1] if len(sys.argv) > 1 else 'hc3_scores.csv'
     rows = load(path)
-    table(rows, 'HC3 — all domains')
+    present = set(rows[0]) if rows else set()
+    METRICS = [m for m in REGISTRY if m[1] in present]
+    table(rows, 'HC3 — all domains', METRICS)
 
     by = defaultdict(list)
     for r in rows:
         by[r['source']].append(r)
     for src in sorted(by):
         if len(by[src]) >= 40:
-            table(by[src], 'HC3 — %s' % src)
+            table(by[src], 'HC3 — %s' % src, METRICS)
 
     # where do the two classes actually sit?
     print('\n' + '=' * 76)
